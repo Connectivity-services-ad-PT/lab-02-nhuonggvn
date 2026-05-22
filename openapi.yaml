@@ -82,12 +82,12 @@ paths:
               examples:
                 created:
                   value:
-                    id: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
                     sourceService: core-business
                     alertType: UNAUTHORIZED_ACCESS
                     severity: HIGH
                     message: Phát hiện truy cập trái phép tại cổng chính
                     relatedEventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+                    id: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
                     status: OPEN
                     createdAt: '2026-05-10T08:00:00Z'
                     resolvedAt: null
@@ -119,12 +119,12 @@ paths:
                 firstPage:
                   value:
                     items:
-                      - id: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                        sourceService: core-business
+                      - sourceService: core-business
                         alertType: UNAUTHORIZED_ACCESS
                         severity: HIGH
                         message: Phát hiện truy cập trái phép tại cổng chính
                         relatedEventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+                        id: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
                         status: OPEN
                         createdAt: '2026-05-10T08:00:00Z'
                         resolvedAt: null
@@ -325,7 +325,6 @@ components:
 
     CreateAlertRequest:
       type: object
-      additionalProperties: false
       required: [sourceService, alertType, severity, message]
       properties:
         sourceService:
@@ -358,7 +357,6 @@ components:
       allOf:
         - $ref: '#/components/schemas/CreateAlertRequest'
         - type: object
-          additionalProperties: false
           required: [id, status, createdAt, resolvedAt]
           properties:
             id:
@@ -516,7 +514,7 @@ components:
           type: string
           format: uri
           description: URI định danh loại lỗi.
-          example: https://campus.local/errors/validation
+          example: "https://campus.local/errors/validation"
         title:
           type: string
           minLength: 3
@@ -538,7 +536,7 @@ components:
           type: [string, 'null']
           format: uri
           description: URI của request gây lỗi.
-          example: /alerts
+          example: "https://api.campus.local/alerts"
         errors:
           type: array
           minItems: 0
@@ -572,11 +570,11 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
           example:
-            type: https://campus.local/errors/validation
+            type: "https://campus.local/errors/validation"
             title: Dữ liệu không hợp lệ
             status: 400
             detail: Payload không đúng JSON Schema
-            instance: /alerts
+            instance: "https://api.campus.local/alerts"
             errors:
               - field: alertType
                 code: ENUM_MISMATCH
@@ -589,11 +587,11 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
           example:
-            type: https://campus.local/errors/unauthorized
+            type: "https://campus.local/errors/unauthorized"
             title: Chưa xác thực
             status: 401
             detail: Thiếu Bearer token
-            instance: /alerts/recent
+            instance: "https://api.campus.local/alerts/recent"
             errors: []
 
     Forbidden:
@@ -602,6 +600,13 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://campus.local/errors/forbidden"
+            title: Không có quyền
+            status: 403
+            detail: Tài khoản không có quyền truy cập tài nguyên này
+            instance: "https://api.campus.local/alerts/recent"
+            errors: []
 
     NotFound:
       description: Resource không tồn tại
@@ -609,6 +614,13 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://campus.local/errors/not-found"
+            title: Không tìm thấy tài nguyên
+            status: 404
+            detail: ID tài nguyên yêu cầu không tồn tại trên hệ thống
+            instance: "https://api.campus.local/alerts/123"
+            errors: []
 
     Conflict:
       description: Xung đột nghiệp vụ hoặc trùng idempotency key
@@ -616,6 +628,13 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://campus.local/errors/conflict"
+            title: Xung đột dữ liệu
+            status: 409
+            detail: Trùng lặp mã định danh duy nhất trong hệ thống
+            instance: "https://api.campus.local/events"
+            errors: []
 
     UnprocessableEntity:
       description: Payload đúng định dạng nhưng không hợp lệ về nghiệp vụ
@@ -623,6 +642,13 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://campus.local/errors/unprocessable"
+            title: Lỗi nghiệp vụ không hợp lệ
+            status: 422
+            detail: Dữ liệu đúng cấu trúc cú pháp nhưng vi phạm quy tắc logic trường học
+            instance: "https://api.campus.local/alerts"
+            errors: []
 
     InternalServerError:
       description: Lỗi không mong muốn phía server
@@ -630,3 +656,10 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+          example:
+            type: "https://campus.local/errors/internal"
+            title: Lỗi hệ thống trung tâm
+            status: 500
+            detail: Đã xảy ra sự cố không mong muốn từ phía máy chủ dịch vụ
+            instance: "https://api.campus.local/alerts"
+            errors: []
