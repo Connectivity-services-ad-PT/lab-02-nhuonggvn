@@ -1,38 +1,41 @@
 openapi: 3.1.0
 info:
-  title: Smart Campus — Lab 02 Contract Template
+  title: Smart Campus — AI Vision API (Pair 02 Core Business ↔ AI Vision)
   version: 1.0.0
-  description: |
-    Hợp đồng API mẫu cho Lab 02.
-    Sinh viên cần sửa lại title, description, path, schema và example theo cặp đàm phán thực tế.
   contact:
-    name: FIT4110 Teaching Team
-    email: fit4110@example.edu.vn
+    name: Nhom A6 Core Business
+    email: support@campus.local
+  description: |
+    Hợp đồng API OpenAPI 3.1 cho Pair 02 (REST sync) giữa Core Business và AI Vision.
+    Consumer: Core Business (A6/B6)
+    Provider: AI Vision (A4/B4)
+
+    Hợp đồng này quy định luồng tích hợp đồng bộ (REST sync) và bất đồng bộ để phân tích hình ảnh, phát hiện khuôn mặt/biển số/xâm nhập trái phép từ camera nhằm phục vụ các quyết định nghiệp vụ của Core Business.
 servers:
   - url: http://localhost:4010
     description: Prism mock server
   - url: https://api.campus.local
     description: Class network placeholder
 tags:
-  - name: health
-    description: Kiểm tra trạng thái service
-  - name: alerts
-    description: Quản lý cảnh báo Smart Campus
-  - name: events
-    description: Quản lý sự kiện nghiệp vụ
+  - name: system
+    description: Các endpoint hệ thống và vận hành
+  - name: vision
+    description: Nghiệp vụ xử lý phân tích hình ảnh của AI Vision
+
 security:
   - bearerAuth: []
+
 paths:
   /health:
     get:
       operationId: getHealth
-      summary: Kiểm tra trạng thái service
-      description: Endpoint kiểm tra service còn hoạt động.
-      tags: [health]
+      summary: Kiểm tra trạng thái service AI Vision
+      description: Endpoint kiểm tra tình trạng hoạt động (health check) của dịch vụ AI Vision.
+      tags: [system]
       security: []
       responses:
         '200':
-          description: Service đang hoạt động
+          description: Service đang hoạt động bình thường
           content:
             application/json:
               schema:
@@ -41,136 +44,188 @@ paths:
                 ok:
                   value:
                     status: ok
-                    service: lab02-contract-template
-                    time: '2026-05-10T08:00:00Z'
+                    service: ai-vision-service
+                    time: '2026-05-28T15:00:00Z'
 
-  /alerts:
+  /vision/detect:
     post:
-      operationId: createAlert
-      summary: Tạo cảnh báo mới
+      operationId: submitVisionDetect
+      summary: Yêu cầu phân tích hình ảnh/frame
       description: |
-        Endpoint mẫu để Provider nhận yêu cầu tạo cảnh báo từ Consumer.
-        Sinh viên cần sửa theo cặp đàm phán thực tế.
-      tags: [alerts]
+        Gửi hình ảnh (thông qua URL ảnh hoặc chuỗi Base64) để AI Vision thực hiện nhận diện khuôn mặt, biển số xe, đột nhập hoặc các yếu tố an ninh khác.
+        Hỗ trợ cả luồng đồng bộ (201 Created) và bất đồng bộ (202 Accepted) phụ thuộc vào tải của hệ thống hoặc yêu cầu của nghiệp vụ.
+      tags: [vision]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateAlertRequest'
+              $ref: '#/components/schemas/VisionDetectRequest'
             examples:
-              unauthorizedAccess:
+              detectByUrl:
                 value:
-                  sourceService: core-business
-                  alertType: UNAUTHORIZED_ACCESS
-                  severity: HIGH
-                  message: Phát hiện truy cập trái phép tại cổng chính
-                  relatedEventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+                  requestId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+                  cameraId: CAM-001
+                  capturedAt: '2026-05-28T15:00:00Z'
+                  imageType: URL
+                  imageUrl: https://campus.local/images/cam-001/frame-123.jpg
+                  locationId: GATE-01
+                  metadata:
+                    priority: HIGH
+              detectByBase64:
+                value:
+                  requestId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babd
+                  cameraId: CAM-002
+                  capturedAt: '2026-05-28T15:01:00Z'
+                  imageType: BASE64
+                  imageBase64: data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP...
+                  locationId: BLOCK-A
       responses:
         '201':
-          description: Cảnh báo đã được tạo
+          description: Phân tích thành công và trả kết quả tức thời (Đồng bộ)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisionDetectResult'
+              examples:
+                successMatch:
+                  value:
+                    requestId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+                    status: SUCCESS
+                    detectedAt: '2026-05-28T15:00:02Z'
+                    detections:
+                      - type: UNKNOWN_PERSON
+                        confidence: 0.94
+                        boundingBox:
+                          x: 120.5
+                          y: 85.0
+                          width: 45.2
+                          height: 110.8
+                    processingTimeMs: 245
+                    modelVersion: yolov8x-face-v2.1
+                    notes: Phát hiện đối tượng chưa đăng ký trong khu vực.
+        '202':
+          description: Yêu cầu được tiếp nhận và xử lý bất đồng bộ (Async)
           headers:
             Location:
-              description: URI của alert vừa tạo.
+              description: URI để tra cứu kết quả xử lý thông qua GET /vision/detect/{requestId}.
               schema:
                 type: string
                 format: uri
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Alert'
+                $ref: '#/components/schemas/VisionDetectAsyncResponse'
               examples:
-                created:
+                accepted:
                   value:
-                    sourceService: core-business
-                    alertType: UNAUTHORIZED_ACCESS
-                    severity: HIGH
-                    message: Phát hiện truy cập trái phép tại cổng chính
-                    relatedEventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                    id: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                    status: OPEN
-                    createdAt: '2026-05-10T08:00:00Z'
-                    resolvedAt: null
+                    requestId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babd
+                    status: PROCESSING
+                    submittedAt: '2026-05-28T15:01:02Z'
+                    estimatedDurationMs: 1500
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /vision/detect/{requestId}:
     get:
-      operationId: listAlerts
-      summary: Lấy danh sách cảnh báo
-      description: Lấy danh sách cảnh báo với cursor-based pagination.
-      tags: [alerts]
+      operationId: getVisionDetectResult
+      summary: Tra cứu kết quả phân tích hình ảnh
+      description: Lấy kết quả phân tích hình ảnh hoặc trạng thái xử lý dựa trên requestId đã gửi từ trước.
+      tags: [vision]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Trả về kết quả phân tích hình ảnh đã hoàn tất
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisionDetectResult'
+              examples:
+                completedResult:
+                  value:
+                    requestId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+                    status: SUCCESS
+                    detectedAt: '2026-05-28T15:00:02Z'
+                    detections:
+                      - type: UNKNOWN_PERSON
+                        confidence: 0.94
+                        boundingBox:
+                          x: 120.5
+                          y: 85.0
+                          width: 45.2
+                          height: 110.8
+                    processingTimeMs: 245
+                    modelVersion: yolov8x-face-v2.1
+                    notes: Phát hiện đối tượng chưa đăng ký.
+        '202':
+          description: Yêu cầu vẫn đang trong hàng đợi hoặc đang xử lý
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisionDetectAsyncResponse'
+              examples:
+                stillProcessing:
+                  value:
+                    requestId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babd
+                    status: PROCESSING
+                    submittedAt: '2026-05-28T15:01:02Z'
+                    estimatedDurationMs: 800
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vision/results/recent:
+    get:
+      operationId: getRecentResults
+      summary: Lấy kết quả phân tích gần đây (Phân trang Cursor)
+      description: Lấy danh sách lịch sử kết quả phân tích hình ảnh thành công gần đây nhất, áp dụng kỹ thuật Cursor-based Pagination.
+      tags: [vision]
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: Danh sách cảnh báo
+          description: Danh sách kết quả phân tích phân trang thành công
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AlertPage'
+                $ref: '#/components/schemas/VisionDetectResultPage'
               examples:
                 firstPage:
                   value:
                     items:
-                      - sourceService: core-business
-                        alertType: UNAUTHORIZED_ACCESS
-                        severity: HIGH
-                        message: Phát hiện truy cập trái phép tại cổng chính
-                        relatedEventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                        id: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                        status: OPEN
-                        createdAt: '2026-05-10T08:00:00Z'
-                        resolvedAt: null
-                    nextCursor: null
+                      - requestId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+                        status: SUCCESS
+                        detectedAt: '2026-05-28T15:00:02Z'
+                        detections:
+                          - type: UNKNOWN_PERSON
+                            confidence: 0.94
+                            boundingBox:
+                              x: 120.5
+                              y: 85.0
+                              width: 45.2
+                              height: 110.8
+                        processingTimeMs: 245
+                        modelVersion: yolov8x-face-v2.1
+                        notes: Phát hiện đối tượng chưa đăng ký.
+                    nextCursor: 'eyJjcmVhdGVkX2F0IjoiMjAyNi0wNS0yOFQxNTowMDowMFoiLCJpZCI6MTIzfQ=='
                     hasMore: false
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  /alerts/recent:
-    get:
-      operationId: getRecentAlerts
-      summary: Lấy các cảnh báo gần đây
-      description: Endpoint mẫu cho cặp Analytics ↔ Core Business hoặc Frontend ↔ Core Business.
-      tags: [alerts]
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          description: Số cảnh báo tối đa cần lấy.
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-      responses:
-        '200':
-          description: Danh sách cảnh báo gần đây
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    minItems: 0
-                    maxItems: 100
-                    items:
-                      $ref: '#/components/schemas/Alert'
-              examples:
-                recentAlerts:
-                  value:
-                    items: []
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -178,91 +233,114 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /alerts/{alertId}:
+  /vision/detections:
     get:
-      operationId: getAlertById
-      summary: Lấy chi tiết một cảnh báo
-      description: Lấy chi tiết alert theo UUID.
-      tags: [alerts]
+      operationId: listDetectionsHistory
+      summary: Lấy lịch sử yêu cầu phân tích (Phân trang Cursor)
+      description: Lấy danh sách lịch sử toàn bộ yêu cầu phân tích hình ảnh đã được gửi lên hệ thống (bao gồm cả thành công và thất bại), sử dụng Cursor-based Pagination.
+      tags: [vision]
       parameters:
-        - $ref: '#/components/parameters/AlertId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: Chi tiết cảnh báo
+          description: Danh sách lịch sử yêu cầu phân tích hình ảnh
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Alert'
+                $ref: '#/components/schemas/VisionDetectResultPage'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /events:
-    post:
-      operationId: createCampusEvent
-      summary: Gửi sự kiện nghiệp vụ vào hệ thống
-      description: |
-        Endpoint minh họa polymorphism. Event có thể là SensorEvent hoặc AccessEvent.
-      tags: [events]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CampusEvent'
-            examples:
-              sensorEvent:
-                value:
-                  eventType: SENSOR_READING
-                  eventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-                  deviceId: SENSOR-001
-                  metric: temperature
-                  value: 38.5
-                  unit: celsius
-                  timestamp: '2026-05-10T08:00:00Z'
-              accessEvent:
-                value:
-                  eventType: ACCESS_CHECK
-                  eventId: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babd
-                  gateId: GATE-01
-                  cardId: RFID-2026-001
-                  decision: ALLOW
-                  timestamp: '2026-05-10T08:01:00Z'
+  /vision/models:
+    get:
+      operationId: listVisionModels
+      summary: Lấy danh sách model AI đang chạy
+      description: Trả về danh sách thông tin các model AI nhận diện đang hoạt động để phục vụ audit/debug của Core Business.
+      tags: [vision]
       responses:
-        '201':
-          description: Event đã được ghi nhận
+        '200':
+          description: Trả về danh sách model AI đang kích hoạt
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EventAccepted'
-        '400':
-          $ref: '#/components/responses/BadRequest'
+                type: object
+                additionalProperties: false
+                required: [models]
+                properties:
+                  models:
+                    type: array
+                    minItems: 0
+                    maxItems: 50
+                    items:
+                      $ref: '#/components/schemas/ModelInfo'
+              examples:
+                activeModels:
+                  value:
+                    models:
+                      - modelName: yolov8x-face
+                        version: v2.1
+                        type: FACE_MATCH
+                        status: ACTIVE
+                      - modelName: yolov8-license-plate
+                        version: v1.4
+                        type: LICENSE_PLATE
+                        status: ACTIVE
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vision/face-match:
+    post:
+      operationId: faceMatchLegacy
+      summary: "[DEPRECATED] Nhận diện khuôn mặt đồng bộ (API Cũ)"
+      description: |
+        API cũ dùng để so khớp khuôn mặt trực tiếp.
+        Đã bị DEPRECATED để chuyển sang sử dụng API tổng quát `/vision/detect`.
+        API này sẽ chính thức dừng hoạt động (Sunset) từ ngày 2026-12-31.
+      deprecated: true
+      tags: [vision]
+      responses:
+        '200':
+          description: API cũ phản hồi kết quả (Kèm header Sunset để cảnh báo ngưng hoạt động)
+          headers:
+            Sunset:
+              description: Thời điểm chính thức dừng phục vụ endpoint này.
+              schema:
+                type: string
+                example: 'Thu, 31 Dec 2026 23:59:59 GMT'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisionDetectResult'
 
 webhooks:
-  alertCreated:
+  onDetectionCompleted:
     post:
-      operationId: onAlertCreated
-      summary: Webhook khi có alert mới
-      description: Provider phát sự kiện khi một cảnh báo mới được tạo.
-      tags: [alerts]
+      operationId: onDetectionCompleted
+      summary: Webhook thông báo kết quả phân tích ảnh hoàn tất
+      description: Được gọi bởi AI Vision để thông báo kết quả phân tích cho Core Business khi tiến trình xử lý bất đồng bộ (202 Accepted) hoàn thành.
+      tags: [vision]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Alert'
+              $ref: '#/components/schemas/VisionDetectResult'
       responses:
         '200':
-          description: Consumer đã nhận webhook
+          description: Core Business đã nhận và xử lý kết quả thành công.
+        '204':
+          description: Nhận sự kiện thành công, không có dữ liệu phản hồi.
+        '500':
+          description: Lỗi hệ thống phía Core Business.
 
 components:
   securitySchemes:
@@ -272,33 +350,37 @@ components:
       bearerFormat: JWT
 
   parameters:
-    AlertId:
-      name: alertId
+    RequestId:
+      name: requestId
       in: path
       required: true
-      description: UUID của cảnh báo.
+      description: UUID duy nhất định danh cho yêu cầu phân tích hình ảnh.
       schema:
         type: string
         format: uuid
+
     Cursor:
       name: cursor
       in: query
       required: false
-      description: Cursor dùng để lấy trang tiếp theo.
+      description: Mã cursor mã hóa (base64) để lấy trang kết quả tiếp theo.
       schema:
         type: [string, 'null']
         minLength: 1
-        maxLength: 200
+        maxLength: 300
+        example: 'eyJjcmVhdGVkX2F0IjoiMjAyNi0wNS0yOFQxNTowMDowMFoiLCJpZCI6MTIzfQ=='
+
     Limit:
       name: limit
       in: query
       required: false
-      description: Số item tối đa mỗi trang.
+      description: Số lượng bản ghi tối đa trả về trên mỗi trang.
       schema:
         type: integer
         minimum: 1
         maximum: 100
         default: 20
+        example: 10
 
   schemas:
     HealthStatus:
@@ -309,84 +391,244 @@ components:
         status:
           type: string
           enum: [ok]
-          description: Trạng thái service.
+          description: Trạng thái của service.
           example: ok
         service:
           type: string
           minLength: 2
           maxLength: 80
-          description: Tên service.
-          example: lab02-contract-template
+          description: Tên của dịch vụ.
+          example: ai-vision-service
         time:
           type: string
           format: date-time
-          description: Thời điểm kiểm tra.
-          example: '2026-05-10T08:00:00Z'
+          description: Thời điểm thực hiện healthcheck.
+          example: '2026-05-28T15:00:00Z'
 
-    CreateAlertRequest:
+    VisionDetectRequest:
       type: object
-      required: [sourceService, alertType, severity, message]
+      required: [requestId, cameraId, capturedAt, imageType]
       properties:
-        sourceService:
+        requestId:
+          type: string
+          format: uuid
+          description: UUID định danh cho yêu cầu phân tích, dùng để chống trùng lặp (idempotency key).
+          example: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+        cameraId:
+          type: string
+          pattern: '^CAM-[0-9]{3}$'
+          description: Mã camera chụp lại frame hình (định dạng CAM-XXX).
+          example: CAM-001
+        capturedAt:
+          type: string
+          format: date-time
+          description: Thời điểm ảnh/frame được chụp tại camera.
+          example: '2026-05-28T15:00:00Z'
+        imageType:
+          type: string
+          enum: [URL, BASE64]
+          description: Phương thức truyền ảnh, dùng làm discriminator.
+          example: URL
+        correlationId:
+          type: [string, 'null']
+          format: uuid
+          description: ID liên kết theo chuỗi luồng nghiệp vụ.
+          example: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babd
+        locationId:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 80
+          description: Định danh địa điểm xảy ra sự kiện (nếu có).
+          example: GATE-01
+        metadata:
+          type: [object, 'null']
+          additionalProperties: true
+          description: Dữ liệu tùy chọn bổ sung đi kèm.
+          example:
+            priority: HIGH
+      oneOf:
+        - $ref: '#/components/schemas/VisionDetectRequestUrl'
+        - $ref: '#/components/schemas/VisionDetectRequestBase64'
+      discriminator:
+        propertyName: imageType
+        mapping:
+          URL: '#/components/schemas/VisionDetectRequestUrl'
+          BASE64: '#/components/schemas/VisionDetectRequestBase64'
+
+    VisionDetectRequestUrl:
+      allOf:
+        - type: object
+          required: [imageUrl]
+          properties:
+            imageUrl:
+              type: string
+              format: uri
+              description: Đường dẫn URI công khai chứa hình ảnh để tải về xử lý.
+              example: https://campus.local/images/cam-001/frame-123.jpg
+            imageType:
+              type: string
+              const: URL
+
+    VisionDetectRequestBase64:
+      allOf:
+        - type: object
+          required: [imageBase64]
+          properties:
+            imageBase64:
+              type: string
+              minLength: 10
+              maxLength: 10485760
+              description: Nội dung ảnh được mã hóa dưới dạng base64. Giới hạn tối đa 10MB.
+              example: data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP...
+            imageType:
+              type: string
+              const: BASE64
+
+    VisionDetectResult:
+      type: object
+      additionalProperties: false
+      required: [requestId, status, detectedAt, detections]
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          description: Khớp với requestId trong yêu cầu gửi lên.
+          example: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+        status:
+          type: string
+          enum: [SUCCESS, FAILED]
+          description: Trạng thái xử lý phân tích hình ảnh.
+          example: SUCCESS
+        detectedAt:
+          type: string
+          format: date-time
+          description: Thời điểm AI hoàn thành việc phân tích hình ảnh.
+          example: '2026-05-28T15:00:02Z'
+        detections:
+          type: array
+          minItems: 0
+          maxItems: 100
+          description: Danh sách các đối tượng nhận dạng được.
+          items:
+            $ref: '#/components/schemas/DetectionItem'
+        processingTimeMs:
+          type: integer
+          minimum: 0
+          description: Thời gian xử lý ảnh tính bằng mili-giây.
+          example: 245
+        modelVersion:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Tên và phiên bản model AI phân tích thực tế.
+          example: yolov8x-face-v2.1
+        notes:
+          type: [string, 'null']
+          maxLength: 500
+          description: Ghi chú hoặc thông điệp chi tiết bổ sung.
+          example: Phát hiện đối tượng chưa đăng ký trong khu vực.
+
+    DetectionItem:
+      type: object
+      additionalProperties: false
+      required: [type, confidence]
+      properties:
+        type:
+          type: string
+          enum: [UNKNOWN_PERSON, INTRUSION, PLATE, WEAPON, FIRE, SMOKE, ACCIDENT]
+          description: Phân loại đối tượng nhận dạng được.
+          example: UNKNOWN_PERSON
+        confidence:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: Độ tin cậy nhận dạng (giá trị trong khoảng 0.0 đến 1.0).
+          example: 0.94
+        boundingBox:
+          $ref: '#/components/schemas/BoundingBox'
+
+    BoundingBox:
+      type: [object, 'null']
+      additionalProperties: false
+      required: [x, y, width, height]
+      properties:
+        x:
+          type: number
+          minimum: 0.0
+          description: Tọa độ X góc trên bên trái vùng nhận dạng.
+          example: 120.5
+        y:
+          type: number
+          minimum: 0.0
+          description: Tọa độ Y góc trên bên trái vùng nhận dạng.
+          example: 85.0
+        width:
+          type: number
+          minimum: 0.0
+          description: Chiều rộng hộp giới hạn đối tượng.
+          example: 45.2
+        height:
+          type: number
+          minimum: 0.0
+          description: Chiều cao hộp giới hạn đối tượng.
+          example: 110.8
+
+    VisionDetectAsyncResponse:
+      type: object
+      additionalProperties: false
+      required: [requestId, status, submittedAt, estimatedDurationMs]
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          description: Khớp với requestId trong yêu cầu gửi lên.
+          example: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+        status:
+          type: string
+          enum: [PENDING, PROCESSING]
+          description: Trạng thái hiện tại trong hàng đợi xử lý bất đồng bộ.
+          example: PROCESSING
+        submittedAt:
+          type: string
+          format: date-time
+          description: Thời điểm hệ thống nhận yêu cầu xếp hàng.
+          example: '2026-05-28T15:00:00Z'
+        estimatedDurationMs:
+          type: integer
+          minimum: 0
+          description: Dự kiến thời gian hoàn thành phân tích còn lại (ms).
+          example: 1500
+
+    ModelInfo:
+      type: object
+      additionalProperties: false
+      required: [modelName, version, type, status]
+      properties:
+        modelName:
           type: string
           minLength: 2
           maxLength: 80
-          pattern: '^[a-z0-9-]+$'
-          description: Service tạo alert.
-          example: core-business
-        alertType:
+          description: Tên định danh của AI Model.
+          example: yolov8x-face
+        version:
           type: string
-          enum: [UNAUTHORIZED_ACCESS, SENSOR_THRESHOLD_EXCEEDED, UNKNOWN_PERSON, SYSTEM_ERROR]
-          description: Loại cảnh báo.
-          example: UNAUTHORIZED_ACCESS
-        severity:
-          $ref: '#/components/schemas/AlertSeverity'
-        message:
+          minLength: 1
+          maxLength: 40
+          description: Phiên bản của model.
+          example: v2.1
+        type:
           type: string
-          minLength: 5
-          maxLength: 500
-          description: Nội dung cảnh báo.
-          example: Phát hiện truy cập trái phép tại cổng chính
-        relatedEventId:
-          type: [string, 'null']
-          format: uuid
-          description: Event liên quan, có thể null nếu chưa có event id.
-          example: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
+          enum: [FACE_MATCH, OBJECT_DETECTION, LICENSE_PLATE]
+          description: Lĩnh vực nhận dạng chính của model.
+          example: FACE_MATCH
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+          deprecated: true
+          description: "[DEPRECATED] Trạng thái hoạt động. Sẽ bị xóa trong v2.0, vui lòng chuyển đổi sớm."
+          example: ACTIVE
 
-    Alert:
-      allOf:
-        - $ref: '#/components/schemas/CreateAlertRequest'
-        - type: object
-          required: [id, status, createdAt, resolvedAt]
-          properties:
-            id:
-              type: string
-              format: uuid
-              description: UUID của alert.
-              example: 0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
-            status:
-              type: string
-              enum: [OPEN, ACKNOWLEDGED, RESOLVED]
-              description: Trạng thái xử lý alert.
-              example: OPEN
-            createdAt:
-              type: string
-              format: date-time
-              description: Thời điểm tạo alert.
-              example: '2026-05-10T08:00:00Z'
-            resolvedAt:
-              type: [string, 'null']
-              format: date-time
-              description: Thời điểm xử lý xong, null nếu chưa xử lý.
-              example: null
-
-    AlertSeverity:
-      type: string
-      enum: [LOW, MEDIUM, HIGH, CRITICAL]
-      description: Mức độ nghiêm trọng của cảnh báo.
-      example: HIGH
-
-    AlertPage:
+    VisionDetectResultPage:
       type: object
       additionalProperties: false
       required: [items, nextCursor, hasMore]
@@ -395,115 +637,17 @@ components:
           type: array
           minItems: 0
           maxItems: 100
+          description: Mảng kết quả phân tích trong trang hiện tại.
           items:
-            $ref: '#/components/schemas/Alert'
+            $ref: '#/components/schemas/VisionDetectResult'
         nextCursor:
           type: [string, 'null']
-          description: Cursor trang tiếp theo, null nếu hết dữ liệu.
-          example: null
+          description: Chuỗi cursor đại diện cho trang tiếp theo (null nếu là trang cuối).
+          example: 'eyJjcmVhdGVkX2F0IjoiMjAyNi0wNS0yOFQxNTowMDowMFoiLCJpZCI6MTIzfQ=='
         hasMore:
           type: boolean
-          description: Còn dữ liệu ở trang sau hay không.
+          description: Cờ đánh dấu còn dữ liệu ở trang sau hay không.
           example: false
-
-    CampusEvent:
-      oneOf:
-        - $ref: '#/components/schemas/SensorEvent'
-        - $ref: '#/components/schemas/AccessEvent'
-      discriminator:
-        propertyName: eventType
-        mapping:
-          SENSOR_READING: '#/components/schemas/SensorEvent'
-          ACCESS_CHECK: '#/components/schemas/AccessEvent'
-
-    SensorEvent:
-      type: object
-      additionalProperties: false
-      required: [eventType, eventId, deviceId, metric, value, unit, timestamp]
-      properties:
-        eventType:
-          type: string
-          const: SENSOR_READING
-          description: Loại event.
-          example: SENSOR_READING
-        eventId:
-          type: string
-          format: uuid
-          description: UUID của event.
-        deviceId:
-          type: string
-          pattern: '^SENSOR-[0-9]{3}$'
-          description: Mã thiết bị cảm biến.
-          example: SENSOR-001
-        metric:
-          type: string
-          enum: [temperature, humidity, smoke, motion]
-          description: Loại chỉ số cảm biến.
-          example: temperature
-        value:
-          type: number
-          minimum: -100
-          maximum: 1000
-          description: Giá trị đo được.
-          example: 38.5
-        unit:
-          type: string
-          minLength: 1
-          maxLength: 20
-          description: Đơn vị đo.
-          example: celsius
-        timestamp:
-          type: string
-          format: date-time
-          description: Thời điểm đo.
-
-    AccessEvent:
-      type: object
-      additionalProperties: false
-      required: [eventType, eventId, gateId, cardId, decision, timestamp]
-      properties:
-        eventType:
-          type: string
-          const: ACCESS_CHECK
-          description: Loại event.
-          example: ACCESS_CHECK
-        eventId:
-          type: string
-          format: uuid
-          description: UUID của event.
-        gateId:
-          type: string
-          pattern: '^GATE-[0-9]{2}$'
-          description: Mã cổng.
-          example: GATE-01
-        cardId:
-          type: string
-          pattern: '^RFID-[0-9]{4}-[0-9]{3}$'
-          description: Mã thẻ RFID.
-          example: RFID-2026-001
-        decision:
-          type: string
-          enum: [ALLOW, DENY]
-          description: Quyết định truy cập.
-          example: ALLOW
-        timestamp:
-          type: string
-          format: date-time
-          description: Thời điểm kiểm tra.
-
-    EventAccepted:
-      type: object
-      additionalProperties: false
-      required: [eventId, acceptedAt]
-      properties:
-        eventId:
-          type: string
-          format: uuid
-          description: UUID của event được nhận.
-        acceptedAt:
-          type: string
-          format: date-time
-          description: Thời điểm hệ thống ghi nhận event.
 
     Problem:
       type: object
@@ -513,8 +657,8 @@ components:
         type:
           type: string
           format: uri
-          description: URI định danh loại lỗi.
-          example: "https://campus.local/errors/validation"
+          description: URI định danh loại lỗi theo tiêu chuẩn RFC 7807.
+          example: https://campus.local/errors/validation
         title:
           type: string
           minLength: 3
@@ -525,22 +669,23 @@ components:
           type: integer
           minimum: 400
           maximum: 599
-          description: HTTP status code.
+          description: HTTP status code trả về.
           example: 400
         detail:
           type: [string, 'null']
           maxLength: 500
-          description: Mô tả chi tiết lỗi.
-          example: Field cardId không đúng định dạng
+          description: Mô tả chi tiết nguyên nhân gây lỗi.
+          example: Trường imageBase64 không đúng định dạng base64 hợp lệ
         instance:
           type: [string, 'null']
           format: uri
-          description: URI của request gây lỗi.
-          example: "https://api.campus.local/alerts"
+          description: URI của request cụ thể gây ra lỗi.
+          example: https://campus.local/vision/detect
         errors:
           type: array
           minItems: 0
           maxItems: 50
+          description: Danh sách lỗi chi tiết ở từng field cụ thể (nếu có).
           items:
             type: object
             additionalProperties: false
@@ -550,7 +695,7 @@ components:
                 type: string
                 minLength: 1
                 maxLength: 80
-                example: cardId
+                example: imageBase64
               code:
                 type: string
                 minLength: 2
@@ -560,106 +705,106 @@ components:
                 type: string
                 minLength: 3
                 maxLength: 200
-                example: cardId phải có dạng RFID-YYYY-NNN
+                example: Dữ liệu ảnh base64 không đúng mẫu chuỗi base64
 
   responses:
     BadRequest:
-      description: Dữ liệu sai định dạng
+      description: Dữ liệu gửi lên sai định dạng hoặc thiếu các trường bắt buộc
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
           example:
-            type: "https://campus.local/errors/validation"
+            type: https://campus.local/errors/validation
             title: Dữ liệu không hợp lệ
             status: 400
-            detail: Payload không đúng JSON Schema
-            instance: "https://api.campus.local/alerts"
+            detail: Payload JSON gửi lên không đúng JSON Schema quy định
+            instance: https://campus.local/vision/detect
             errors:
-              - field: alertType
+              - field: imageType
                 code: ENUM_MISMATCH
-                message: alertType không nằm trong danh sách cho phép
+                message: imageType bắt buộc phải là URL hoặc BASE64
 
     Unauthorized:
-      description: Thiếu hoặc sai thông tin xác thực
+      description: Yêu cầu thiếu Bearer Token hoặc token không hợp lệ/hết hạn
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
           example:
-            type: "https://campus.local/errors/unauthorized"
-            title: Chưa xác thực
+            type: https://campus.local/errors/unauthorized
+            title: Chưa xác thực danh tính
             status: 401
-            detail: Thiếu Bearer token
-            instance: "https://api.campus.local/alerts/recent"
+            detail: Token JWT bị thiếu trong tiêu đề Authorization hoặc đã hết hạn sử dụng
+            instance: https://campus.local/vision/detect
             errors: []
 
     Forbidden:
-      description: Không có quyền thực hiện thao tác
+      description: Consumer không có quyền thực hiện thao tác phân tích này
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
           example:
-            type: "https://campus.local/errors/forbidden"
-            title: Không có quyền
+            type: https://campus.local/errors/forbidden
+            title: Không được phép truy cập
             status: 403
-            detail: Tài khoản không có quyền truy cập tài nguyên này
-            instance: "https://api.campus.local/alerts/recent"
+            detail: Khóa API hoặc Token không chứa scope cần thiết (ai-vision:write)
+            instance: https://campus.local/vision/detect
             errors: []
 
     NotFound:
-      description: Resource không tồn tại
+      description: Không tìm thấy requestId hoặc model tương ứng trong hệ thống
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
           example:
-            type: "https://campus.local/errors/not-found"
+            type: https://campus.local/errors/not-found
             title: Không tìm thấy tài nguyên
             status: 404
-            detail: ID tài nguyên yêu cầu không tồn tại trên hệ thống
-            instance: "https://api.campus.local/alerts/123"
+            detail: Yêu cầu phân tích với requestId chỉ định không tồn tại hoặc đã bị xóa
+            instance: https://campus.local/vision/detect/0196fb3d-4ad7-7d1e-9f49-5d5148d2babc
             errors: []
 
     Conflict:
-      description: Xung đột nghiệp vụ hoặc trùng idempotency key
+      description: Xung đột nghiệp vụ, ví dụ trùng lặp requestId nhận dạng đang xử lý
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
           example:
-            type: "https://campus.local/errors/conflict"
-            title: Xung đột dữ liệu
+            type: https://campus.local/errors/conflict
+            title: Yêu cầu bị xung đột dữ liệu
             status: 409
-            detail: Trùng lặp mã định danh duy nhất trong hệ thống
-            instance: "https://api.campus.local/events"
+            detail: requestId này đã được gửi lên hệ thống và đang được xử lý, vui lòng không gửi lặp lại
+            instance: https://campus.local/vision/detect
             errors: []
 
     UnprocessableEntity:
-      description: Payload đúng định dạng nhưng không hợp lệ về nghiệp vụ
+      description: Dữ liệu đúng định dạng JSON Schema nhưng không xử lý được (ví dụ ảnh lỗi, hỏng, quá mờ)
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
           example:
-            type: "https://campus.local/errors/unprocessable"
-            title: Lỗi nghiệp vụ không hợp lệ
+            type: https://campus.local/errors/unprocessable-entity
+            title: Lỗi xử lý nghiệp vụ hình ảnh
             status: 422
-            detail: Dữ liệu đúng cấu trúc cú pháp nhưng vi phạm quy tắc logic trường học
-            instance: "https://api.campus.local/alerts"
+            detail: Không thể giải mã hoặc phân tích tệp ảnh gửi lên do tệp ảnh bị lỗi hoặc không hỗ trợ định dạng
+            instance: https://campus.local/vision/detect
             errors: []
 
     InternalServerError:
-      description: Lỗi không mong muốn phía server
+      description: Lỗi hệ thống hoặc lỗi Runtime phía AI Vision Service không mong muốn
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
           example:
-            type: "https://campus.local/errors/internal"
-            title: Lỗi hệ thống trung tâm
+            type: https://campus.local/errors/internal-server-error
+            title: Lỗi hệ thống nội bộ
             status: 500
-            detail: Đã xảy ra sự cố không mong muốn từ phía máy chủ dịch vụ
-            instance: "https://api.campus.local/alerts"
+            detail: Gặp lỗi nghiêm trọng khi kết nối tới cụm xử lý Model AI (GPU cluster timeout)
+            instance: https://campus.local/vision/detect
             errors: []

@@ -7,8 +7,7 @@
 - Người viết: Nguyễn Văn Hưởng
 - Ngày: 27-05-2026
 
----
-
+--
 ## 1. Resource Consumer cần nhận/gửi
 
 | Resource | Consumer dùng để làm gì? | Field bắt buộc với Consumer | Field có thể tùy chọn |
